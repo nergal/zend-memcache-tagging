@@ -83,34 +83,13 @@ final class Fan_Cache_Backend_Memcache extends Zend_Cache_Backend_Memcached
         $result = FALSE;
         $tag_list = $this->getTagPrefix() . $tag;
 
-        if ($items === NULL) {
+        if (!empty($items)) {
             $result = $this->_memcache->delete($tag_list, 0);
         } else {
             $result = $this->_memcache->set($tag_list, $items);
         }
 
         return $result;
-    }
-
-    /**
-     * Выборка всех существующих тегов
-     *
-     * @return void
-     */
-    public function getTags()
-    {
-        return $this->_memcache->get($this->_tag_list);
-    }
-
-    /**
-     * Сохранение всех существующих тегов
-     *
-     * @param array $list
-     * @return void
-     */
-    public function setTags(Array $list = array())
-    {
-        $this->_memcache->set($this->_tag_list, $list);
     }
 
     /**
@@ -122,7 +101,7 @@ final class Fan_Cache_Backend_Memcache extends Zend_Cache_Backend_Memcached
      */
     private function saveTags($id, $tags = NULL)
     {
-        $all_tags = (array) $this->getTags();
+        $all_tags = (array) $this->_memcache->get($this->_tag_list);
 
         if ($tags === NULL) {
             if (in_array($id, $all_tags)) {
@@ -146,7 +125,7 @@ final class Fan_Cache_Backend_Memcache extends Zend_Cache_Backend_Memcached
             }
         }
 
-        $this->setTags($all_tags);
+        $this->_memcache->set($this->_tag_list, $all_tags);
     }
 
     /**
