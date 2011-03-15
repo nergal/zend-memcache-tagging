@@ -4,18 +4,40 @@
  * Расширенный адаптер для мемкэша
  *
  * @see http://framework.zend.com/issues/browse/ZF-4253
+ * @package Fan
  * @author Nergal
  */
 final class Fan_Cache_Backend_Memcache extends Zend_Cache_Backend_Memcached
 {
     /**
-     * Префикс ключей кэша
+     * @var string
+     */
+    protected $_tag_list = 'FanCacheTag';
+
+    /**
+     * @var integer
+     */
+    protected $_delta = 30;
+
+    /**
+     * Геттер для префикса ключей кэша
      *
      * @return string
      */
 	private function getTagListId()
 	{
-		return "FanCacheTag";
+		return $this->_tag_list;
+	}
+
+	/**
+	 * Сеттер для префикса ключей кэша
+	 *
+	 * @param string
+	 * @return void
+	 */
+	private function setTagListId($tag_list)
+	{
+	    $this->_tag_list = $tag_list;
 	}
 
     /**
@@ -25,53 +47,11 @@ final class Fan_Cache_Backend_Memcache extends Zend_Cache_Backend_Memcached
      */
 	public function getTags()
 	{
-		if(!$tags = $this->_memcache->get($this->getTagListId()))
-		{
+	    $tag_list = $this->getTagListId();
+		if (!$tags = $this->_memcache->get($tag_list)) {
 			$tags = array();
 		}
 		return $tags;
-	}
-
-    /**
-     * Return an array of stored cache ids which match given tags
-     *
-     * In case of multiple tags, a logical AND is made between tags
-     *
-     * @param array $tags array of tags
-     * @return array array of matching cache ids (string)
-     */
-	public function getIdsMatchingTags($tags = array())
-	{
-	    $this->_log('getIdsMatchingTags("' . implode('", "', $tags) . '")');
-	    return parent::getIdsMatchingTags($tags);
-	}
-
-    /**
-     * Return an array of stored cache ids which don't match given tags
-     *
-     * In case of multiple tags, a logical OR is made between tags
-     *
-     * @param array $tags array of tags
-     * @return array array of not matching cache ids (string)
-     */
-	public function getIdsNotMatchingTags($tags = array())
-	{
-	    $this->_log('getIdsNotMatchingTags("' . implode('", "', $tags) . '")');
-	    return parent::getIdsNotMatchingTags($tags);
-	}
-
-    /**
-     * Return an array of stored cache ids which match any given tags
-     *
-     * In case of multiple tags, a logical AND is made between tags
-     *
-     * @param array $tags array of tags
-     * @return array array of any matching cache ids (string)
-     */
-	public function getIdsMatchingAnyTags($tags = array())
-	{
-	    $this->_log('getIdsMatchingAnyTags("' . implode('", "', $tags) . '")');
-	    return parent::getIdsMatchingAnyTags($tags);
 	}
 
 	/**
@@ -82,14 +62,20 @@ final class Fan_Cache_Backend_Memcache extends Zend_Cache_Backend_Memcached
 	 */
 	private function saveTags($id, $tags)
 	{
-		// First get the tags
 		$siteTags = $this->getTags();
 
-		foreach($tags as $tag)
-		{
-			$siteTags[$tag][] = $id;
+		foreach ($tags as $tag) {
+		    if (!isset($siteTags[$tag])) {
+		        $siteTags[$tag] = array();
+		    }
+
+            if (!in_array($id, $siteTags[$tag])) {
+			    $siteTags[$tag][] = $id;
+            }
 		}
-		$this->_memcache->set($this->getTagListId(), $siteTags);
+
+		$tag_list = $this->getTagListId();
+		$this->_memcache->set($tag_list, $siteTags);
 	}
 
 	/**
@@ -100,73 +86,114 @@ final class Fan_Cache_Backend_Memcache extends Zend_Cache_Backend_Memcached
 	 */
 	private function getItemsByTag($tag)
 	{
-		$siteTags = $this->_memcache->get($this->getTagListId());
-		return isset($siteTags[$tag]) ? $siteTags[$tag] : false;
+	    $tag_list = $this->getTagListId();
+		$siteTags = $this->_memcache->get($tag_list);
+		return isset($siteTags[$tag]) ? $siteTags[$tag] : FALSE;
 	}
 
     /**
-     * Save some string datas into a cache record
+     * Выгрузка записи из кэша
      *
-     * Note : $data is always "string" (serialization is done by the
-     * core not by the backend)
-     *
-     * @param  string $data             Datas to cache
-     * @param  string $id               Cache id
-     * @param  array  $tags             Array of strings, the cache record will be tagged by each string entry
-     * @param  int    $specificLifetime If != false, set a specific lifetime for this cache record (null => infinite lifetime)
-     * @return boolean True if no problem
+     * Схема данных:
+     *     - data
+     *     - ctime
+     *     - lifetime
+     * @param  string  $id
+     * @param  boolean $doNotTestCacheValidity
+     * @return string|false
      */
-    public function save($data, $id, $tags = array(), $specificLifetime = false)
+    public function load($id, $doNotTestCacheValidity = FALSE)
+    {
+        $item = $this->_memcache->get($id);
+        if (is_array($item) AND count($item) == 3) {
+            $is_expired = ($item[1] + $item[2]) < time();
+            $is_infinite = $item[2] > 0;
+
+            if ($is_expired === TRUE AND $is_infinite === TRUE) {
+                $this->_memcache->delete($id, 0);
+                return FALSE;
+            }
+            return $item[0];
+        }
+        return FALSE;
+    }
+
+    /**
+     * Проверка существования записи
+     *
+     * @param string $id
+     * @return mixed|false
+     */
+    public function test($id)
+    {
+        $tmp = $this->load($id);
+        return $tmp !== FALSE;
+    }
+
+    /**
+     * Выборка дельты для времени жизни кэша
+     *
+     * @return int
+     */
+    public function getLifetimeDelta()
+    {
+        if ($this->_delta > 0) {
+            return $this->_delta;
+        }
+        return $this->_directives['delta'];
+    }
+
+    /**
+     * Сохранение данных в кэш
+     *
+     * @see parent::save()
+     * @param string $data
+     * @param string $id
+     * @param array $tags
+     * @param int $specificLifetime
+     * @return boolean
+     */
+    public function save($data, $id, $tags = array(), $specificLifetime = FALSE)
     {
         $lifetime = $this->getLifetime($specificLifetime);
-        if ($this->_options['compression']) {
-            $flag = MEMCACHE_COMPRESSED;
-        } else {
-            $flag = 0;
+        $flag = ($this->_options['compression']) ? MEMCACHE_COMPRESSED : 0;
+
+        if ($lifetime > 0 AND $delta = $this->getLifetimeDelta()) {
+            $lifetime+= rand(0, $delta);
         }
-        $result = $this->_memcache->set($id, array($data, time()), $flag, $lifetime);
+
+        $data = array($data, time(), $lifetime);
+
+        $result = $this->_memcache->set($id, $data, $flag, $lifetime);
         if (count($tags) > 0) {
         	$this->saveTags($id, $tags);
         }
+
         return $result;
     }
 
     /**
-     * Clean some cache records
+     * Очистить кэш
      *
-     * Available modes are :
-     * 'all' (default)  => remove all cache entries ($tags is not used)
-     * 'old'            => remove too old cache entries ($tags is not used)
-     * 'matchingTag'    => remove cache entries matching all given tags
-     *                     ($tags can be an array of strings or a single string)
-     * 'notMatchingTag' => remove cache entries not matching one of the given tags
-     *                     ($tags can be an array of strings or a single string)
-     *
-     * @param  string $mode Clean mode
-     * @param  array  $tags Array of tags
-     * @return boolean True if no problem
+     * @see parent::clean()
+     * @param string $mode
+     * @param array $tags
+     * @return boolean
      */
     public function clean($mode = Zend_Cache::CLEANING_MODE_ALL, $tags = array())
     {
-        if ($mode==Zend_Cache::CLEANING_MODE_ALL) {
+        if ($mode == Zend_Cache::CLEANING_MODE_ALL) {
             return $this->_memcache->flush();
         }
-        if ($mode==Zend_Cache::CLEANING_MODE_OLD) {
-            $this->_log("Fan_Cache_Backend_Memcached::clean() : CLEANING_MODE_OLD is unsupported by the Memcached backend");
-        }
-        if ($mode==Zend_Cache::CLEANING_MODE_MATCHING_TAG) {
+
+        if ($mode == Zend_Cache::CLEANING_MODE_MATCHING_TAG) {
         	$siteTags = $newTags = $this->getTags();
 
-        	if(count($siteTags))
-        	{
-	        	foreach($tags as $tag)
-	        	{
-	        		if(isset($siteTags[$tag]))
-	        		{
-	        			foreach($siteTags[$tag] as $item)
-	        			{
-	        				// We call delete directly here because the ID in the cache is already specific for this site
-	        				$this->_memcache->delete($item);
+        	if (count($siteTags)) {
+	        	foreach ($tags as $tag) {
+	        		if (isset($siteTags[$tag])) {
+	        			foreach ($siteTags[$tag] as $item) {
+	        				$this->_memcache->delete($item, 0);
 	        			}
 	        			unset($newTags[$tag]);
 	        		}
@@ -174,17 +201,14 @@ final class Fan_Cache_Backend_Memcache extends Zend_Cache_Backend_Memcached
 	        	$this->_memcache->set($this->getTagListId(),$newTags);
         	}
         }
-        if ($mode==Zend_Cache::CLEANING_MODE_NOT_MATCHING_TAG) {
+
+        if ($mode == Zend_Cache::CLEANING_MODE_NOT_MATCHING_TAG) {
         	$siteTags = $newTags = $this->getTags();
-        	if(count($siteTags))
-        	{
-        		foreach($siteTags as $siteTag => $items)
-        		{
-        			if(array_search($siteTag,$tags) === false)
-        			{
-        				foreach($items as $item)
-        				{
-        					$this->_memcache->delete($item);
+        	if (count($siteTags)) {
+        		foreach ($siteTags as $siteTag => $items) {
+        			if (array_search($siteTag, $tags) === FALSE) {
+        				foreach ($items as $item) {
+        					$this->_memcache->delete($item, 0);
         				}
         				unset($newTags[$siteTag]);
         			}
@@ -195,9 +219,9 @@ final class Fan_Cache_Backend_Memcache extends Zend_Cache_Backend_Memcached
     }
 
     /**
-     * Return an array of stored cache ids
+     * Возвращает список сохранённых id
      *
-     * @return array array of stored cache ids (string)
+     * @return array
      */
     public function getIds()
     {
@@ -224,10 +248,10 @@ final class Fan_Cache_Backend_Memcache extends Zend_Cache_Backend_Memcached
     }
 
     /**
-     * Return the filling percentage of the backend storage
+     * Возвращает заполненность кэша в процентах
      *
      * @throws Zend_Cache_Exception
-     * @return int integer between 0 and 100
+     * @return float
      */
     public function getFillingPercentage()
     {
@@ -236,8 +260,8 @@ final class Fan_Cache_Backend_Memcache extends Zend_Cache_Backend_Memcached
         $memSize = null;
         $memUsed = null;
         foreach ($mems as $key => $mem) {
-            if ($mem === false) {
-                $this->_log('can\'t get stat from ' . $key);
+            if ($mem === FALSE) {
+                $this->_log("can't get stat from {$key}");
                 continue;
             }
 
@@ -252,36 +276,50 @@ final class Fan_Cache_Backend_Memcache extends Zend_Cache_Backend_Memcached
         }
 
         if ($memSize === null || $memUsed === null) {
-            Zend_Cache::throwException('Can\'t get filling percentage');
+            Zend_Cache::throwException("Can't get filling percentage");
         }
 
         return (round(100. * ($memUsed / $memSize), 2));
     }
 
+	/**
+	 * Лок записи в кэше
+	 *
+	 * @param string $key
+	 * @return boolean
+	 */
+	public function lock($key)
+	{
+	    return $this->_memcache->add("lock.{$key}", 1);
+	}
+
+	/**
+	 * Анлок записи
+	 *
+	 * @param string $key
+	 * @return boolean
+	 */
+	public function unlock($key)
+	{
+	    return $this->_memcache->delete($key, 0);
+	}
+
 
     /**
-     * Return an associative array of capabilities (booleans) of the backend
+     * Возвращает параметры совместимости бэкенда
      *
-     * The array must include these keys :
-     * - automatic_cleaning (is automating cleaning necessary)
-     * - tags (are tags supported)
-     * - expired_read (is it possible to read expired cache records
-     *                 (for doNotTestCacheValidity option for example))
-     * - priority does the backend deal with priority when saving
-     * - infinite_lifetime (is infinite lifetime can work with this backend)
-     * - get_list (is it possible to get the list of cache ids and the complete list of tags)
-     *
-     * @return array associative of with capabilities
+     * @see parent::getCapabilities()
+     * @return array
      */
     public function getCapabilities()
     {
         return array(
-            'automatic_cleaning' => false,
-            'tags' => true,
-            'expired_read' => false,
-            'priority' => false,
-            'infinite_lifetime' => false,
-            'get_list' => false
+            'automatic_cleaning' => FALSE,
+            'tags'               => TRUE,
+            'expired_read'       => FALSE,
+            'priority'           => TRUE,
+            'infinite_lifetime'  => FALSE,
+            'get_list'           => FALSE,
         );
     }
 }
