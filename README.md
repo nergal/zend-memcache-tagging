@@ -1,0 +1,1 @@
+Адаптер для memcached в Zend Framework с кэшированием на основе адаптера из Zend issue ZF-4253
