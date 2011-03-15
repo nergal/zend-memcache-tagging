@@ -40,21 +40,21 @@ final class Fan_Cache_Backend_Memcache extends Zend_Cache_Backend_Memcached
      *
      * @return string
      */
-	private function getTagPrefix()
-	{
-		return $this->_tag_prefix;
-	}
+    private function getTagPrefix()
+    {
+        return $this->_tag_prefix;
+    }
 
-	/**
-	 * Сеттер для префикса ключей тегов
-	 *
-	 * @param string $prefix
-	 * @return void
-	 */
-	private function setTagPrefix($prefix)
-	{
-	    $this->_tag_prefix = $prefix;
-	}
+    /**
+     * Сеттер для префикса ключей тегов
+     *
+     * @param string $prefix
+     * @return void
+     */
+    private function setTagPrefix($prefix)
+    {
+        $this->_tag_prefix = $prefix;
+    }
 
     /**
      * Установка записей конкретному тегу
@@ -62,14 +62,14 @@ final class Fan_Cache_Backend_Memcache extends Zend_Cache_Backend_Memcached
      * @param string $tag
      * @return array
      */
-	public function getTagItems($tag)
-	{
-	    $tag_list = $this->getTagPrefix() . $tag;
-		if (!$tags = $this->_memcache->get($tag_list)) {
-			$tags = array();
-		}
-		return $tags;
-	}
+    public function getTagItems($tag)
+    {
+        $tag_list = $this->getTagPrefix() . $tag;
+        if (!$tags = $this->_memcache->get($tag_list)) {
+            $tags = array();
+        }
+        return $tags;
+    }
 
     /**
      * Установка записей конкретному тегу
@@ -78,88 +78,88 @@ final class Fan_Cache_Backend_Memcache extends Zend_Cache_Backend_Memcached
      * @param array $items
      * @return boolean
      */
-	public function setTagItems($tag, $items = NULL)
-	{
-	    $result = FALSE;
-	    $tag_list = $this->getTagPrefix() . $tag;
+    public function setTagItems($tag, $items = NULL)
+    {
+        $result = FALSE;
+        $tag_list = $this->getTagPrefix() . $tag;
 
-	    if ($items === NULL) {
-		    $result = $this->_memcache->delete($tag_list, 0);
-	    } else {
-	        $result = $this->_memcache->set($tag_list, $items);
-	    }
+        if ($items === NULL) {
+            $result = $this->_memcache->delete($tag_list, 0);
+        } else {
+            $result = $this->_memcache->set($tag_list, $items);
+        }
 
-	    return $result;
-	}
+        return $result;
+    }
 
-	/**
-	 * Выборка всех существующих тегов
-	 *
-	 * @return void
-	 */
-	public function getTags()
-	{
-	    return $this->_memcache->get($this->_tag_list);
-	}
+    /**
+     * Выборка всех существующих тегов
+     *
+     * @return void
+     */
+    public function getTags()
+    {
+        return $this->_memcache->get($this->_tag_list);
+    }
 
-	/**
-	 * Сохранение всех существующих тегов
-	 *
-	 * @param array $list
-	 * @return void
-	 */
-	public function setTags(Array $list = array())
-	{
+    /**
+     * Сохранение всех существующих тегов
+     *
+     * @param array $list
+     * @return void
+     */
+    public function setTags(Array $list = array())
+    {
         $this->_memcache->set($this->_tag_list, $list);
-	}
+    }
 
-	/**
-	 * Сохранение тегов
-	 *
-	 * @param string $id
-	 * @param array $tags
-	 * @return void
-	 */
-	private function saveTags($id, $tags = NULL)
-	{
-	    $all_tags = (array) $this->getTags();
+    /**
+     * Сохранение тегов
+     *
+     * @param string $id
+     * @param array $tags
+     * @return void
+     */
+    private function saveTags($id, $tags = NULL)
+    {
+        $all_tags = (array) $this->getTags();
 
-	    if ($tags === NULL) {
-	        if (in_array($id, $all_tags)) {
-	            unset($all_tags[$id]);
-	        }
+        if ($tags === NULL) {
+            if (in_array($id, $all_tags)) {
+                unset($all_tags[$id]);
+            }
 
-	        $this->setTagItems($id);
-	    } else {
-			foreach ($tags as $tag) {
-			    $_tags = (array) $this->getTagItems($tag);
+            $this->setTagItems($id);
+        } else {
+            foreach ($tags as $tag) {
+                $_tags = (array) $this->getTagItems($tag);
 
-	            if (!in_array($id, $_tags)) {
-				    $_tags[] = $id;
+                if (!in_array($id, $_tags)) {
+                    $_tags[] = $id;
 
-				    $this->setTagItems($tag, $_tags);
+                    $this->setTagItems($tag, $_tags);
 
-				    if (!in_array($tag, $all_tags)) {
-				        $all_tags[] = $tag;
-				    }
-	            }
-			}
-	    }
+                    if (!in_array($tag, $all_tags)) {
+                        $all_tags[] = $tag;
+                    }
+                }
+            }
+        }
 
-		$this->setTags($all_tags);
-	}
+        $this->setTags($all_tags);
+    }
 
-	/**
-	 * Возврат записей по тегу
-	 *
-	 * @param string $tag
-	 * @return mixed
-	 */
-	private function getItemsByTag($tag)
-	{
-	    $tag_list = $this->getTagPrefix() . $tag;
-		return $this->_memcache->get($tag_list);
-	}
+    /**
+     * Возврат записей по тегу
+     *
+     * @param string $tag
+     * @return mixed
+     */
+    private function getItemsByTag($tag)
+    {
+        $tag_list = $this->getTagPrefix() . $tag;
+        return $this->_memcache->get($tag_list);
+    }
 
     /**
      * Выгрузка записи из кэша
@@ -237,7 +237,7 @@ final class Fan_Cache_Backend_Memcache extends Zend_Cache_Backend_Memcached
         $result = $this->_memcache->set($id, $data, $flag, $lifetime);
 
         if (count($tags) > 0) {
-        	$this->saveTags($id, $tags);
+            $this->saveTags($id, $tags);
         }
 
         return $result;
@@ -278,25 +278,25 @@ final class Fan_Cache_Backend_Memcache extends Zend_Cache_Backend_Memcached
     public function getIds()
     {
         $list = array();
-		$allSlabs = $this->_memcache->getExtendedStats('slabs');
-		$items = $this->_memcache->getExtendedStats('items');
+        $allSlabs = $this->_memcache->getExtendedStats('slabs');
+        $items = $this->_memcache->getExtendedStats('items');
 
-		foreach($allSlabs as $server => $slabs) {
-		    foreach($slabs AS $slabId => $slabMeta) {
-		        if (is_numeric($slabId)) {
-		            $cdump = $this->_memcache->getExtendedStats('cachedump', (int) $slabId);
-		            foreach($cdump AS $server => $entries) {
-		                if($entries) {
-		                    foreach($entries AS $eName => $eData) {
-		                        $list[] = $eName;
-		                    }
-		                }
-		            }
-		        }
-		    }
-		}
+        foreach($allSlabs as $server => $slabs) {
+            foreach($slabs AS $slabId => $slabMeta) {
+                if (is_numeric($slabId)) {
+                    $cdump = $this->_memcache->getExtendedStats('cachedump', (int) $slabId);
+                    foreach($cdump AS $server => $entries) {
+                        if($entries) {
+                            foreach($entries AS $eName => $eData) {
+                                $list[] = $eName;
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
-		return $list;
+        return $list;
     }
 
     /**
@@ -334,27 +334,27 @@ final class Fan_Cache_Backend_Memcache extends Zend_Cache_Backend_Memcached
         return (round(100. * ($memUsed / $memSize), 2));
     }
 
-	/**
-	 * Лок записи в кэше
-	 *
-	 * @param string $key
-	 * @return boolean
-	 */
-	public function lock($key)
-	{
-	    return $this->_memcache->add("lock.{$key}", 1);
-	}
+    /**
+     * Лок записи в кэше
+     *
+     * @param string $key
+     * @return boolean
+     */
+    public function lock($key)
+    {
+        return $this->_memcache->add("lock.{$key}", 1);
+    }
 
-	/**
-	 * Анлок записи
-	 *
-	 * @param string $key
-	 * @return boolean
-	 */
-	public function unlock($key)
-	{
-	    return $this->_memcache->delete($key, 0);
-	}
+    /**
+     * Анлок записи
+     *
+     * @param string $key
+     * @return boolean
+     */
+    public function unlock($key)
+    {
+        return $this->_memcache->delete($key, 0);
+    }
 
 
     /**
