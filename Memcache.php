@@ -12,7 +12,12 @@ final class Fan_Cache_Backend_Memcache extends Zend_Cache_Backend_Memcached
     /**
      * @var string
      */
-    protected $_tag_list = 'FanCacheTag';
+    protected $_tag_prefix = 'FanCacheTag_';
+
+    /**
+     * @var string
+     */
+    protected $_tag_list = 'FanAllTags';
 
     /**
      * @var integer
@@ -20,38 +25,92 @@ final class Fan_Cache_Backend_Memcache extends Zend_Cache_Backend_Memcached
     protected $_delta = 30;
 
     /**
-     * Геттер для префикса ключей кэша
+     * @see parent::$_directives
+     * @var array
+     */
+    protected $_directives = array(
+        'lifetime' => 3600,
+        'logging'  => FALSE,
+        'logger'   => NULL,
+        'delta'    => 300,
+    );
+
+    /**
+     * Геттер для префикса ключей тегов
      *
      * @return string
      */
-	private function getTagListId()
+	private function getTagPrefix()
 	{
-		return $this->_tag_list;
+		return $this->_tag_prefix;
 	}
 
 	/**
-	 * Сеттер для префикса ключей кэша
+	 * Сеттер для префикса ключей тегов
 	 *
-	 * @param string
+	 * @param string $prefix
 	 * @return void
 	 */
-	private function setTagListId($tag_list)
+	private function setTagPrefix($prefix)
 	{
-	    $this->_tag_list = $tag_list;
+	    $this->_tag_prefix = $prefix;
 	}
 
     /**
-     * Return an array of stored tags
+     * Установка записей конкретному тегу
      *
-     * @return array array of stored tags (string)
+     * @param string $tag
+     * @return array
      */
-	public function getTags()
+	public function getTagItems($tag)
 	{
-	    $tag_list = $this->getTagListId();
+	    $tag_list = $this->getTagPrefix() . $tag;
 		if (!$tags = $this->_memcache->get($tag_list)) {
 			$tags = array();
 		}
 		return $tags;
+	}
+
+    /**
+     * Установка записей конкретному тегу
+     *
+     * @param string $tag
+     * @param array $items
+     * @return boolean
+     */
+	public function setTagItems($tag, $items = NULL)
+	{
+	    $result = FALSE;
+	    $tag_list = $this->getTagPrefix() . $tag;
+
+	    if ($items === NULL) {
+		    $result = $this->_memcache->delete($tag_list, 0);
+	    } else {
+	        $result = $this->_memcache->set($tag_list, $items);
+	    }
+
+	    return $result;
+	}
+
+	/**
+	 * Выборка всех существующих тегов
+	 *
+	 * @return void
+	 */
+	public function getTags()
+	{
+	    return $this->_memcache->get($this->_tag_list);
+	}
+
+	/**
+	 * Сохранение всех существующих тегов
+	 *
+	 * @param array $list
+	 * @return void
+	 */
+	public function setTags(Array $list = array())
+	{
+        $this->_memcache->set($this->_tag_list, $list);
 	}
 
 	/**
@@ -59,23 +118,35 @@ final class Fan_Cache_Backend_Memcache extends Zend_Cache_Backend_Memcached
 	 *
 	 * @param string $id
 	 * @param array $tags
+	 * @return void
 	 */
-	private function saveTags($id, $tags)
+	private function saveTags($id, $tags = NULL)
 	{
-		$siteTags = $this->getTags();
+	    $all_tags = (array) $this->getTags();
 
-		foreach ($tags as $tag) {
-		    if (!isset($siteTags[$tag])) {
-		        $siteTags[$tag] = array();
-		    }
+	    if ($tags === NULL) {
+	        if (in_array($id, $all_tags)) {
+	            unset($all_tags[$id]);
+	        }
 
-            if (!in_array($id, $siteTags[$tag])) {
-			    $siteTags[$tag][] = $id;
-            }
-		}
+	        $this->setTagItems($id);
+	    } else {
+			foreach ($tags as $tag) {
+			    $_tags = (array) $this->getTagItems($tag);
 
-		$tag_list = $this->getTagListId();
-		$this->_memcache->set($tag_list, $siteTags);
+	            if (!in_array($id, $_tags)) {
+				    $_tags[] = $id;
+
+				    $this->setTagItems($tag, $_tags);
+
+				    if (!in_array($tag, $all_tags)) {
+				        $all_tags[] = $tag;
+				    }
+	            }
+			}
+	    }
+
+		$this->setTags($all_tags);
 	}
 
 	/**
@@ -86,9 +157,8 @@ final class Fan_Cache_Backend_Memcache extends Zend_Cache_Backend_Memcached
 	 */
 	private function getItemsByTag($tag)
 	{
-	    $tag_list = $this->getTagListId();
-		$siteTags = $this->_memcache->get($tag_list);
-		return isset($siteTags[$tag]) ? $siteTags[$tag] : FALSE;
+	    $tag_list = $this->getTagPrefix() . $tag;
+		return $this->_memcache->get($tag_list);
 	}
 
     /**
@@ -115,6 +185,7 @@ final class Fan_Cache_Backend_Memcache extends Zend_Cache_Backend_Memcached
             }
             return $item[0];
         }
+
         return FALSE;
     }
 
@@ -137,10 +208,9 @@ final class Fan_Cache_Backend_Memcache extends Zend_Cache_Backend_Memcached
      */
     public function getLifetimeDelta()
     {
-        if ($this->_delta > 0) {
-            return $this->_delta;
-        }
-        return $this->_directives['delta'];
+        return ($this->_delta > 0)
+              ? $this->_delta
+              : $this->_directives['delta'];
     }
 
     /**
@@ -165,6 +235,7 @@ final class Fan_Cache_Backend_Memcache extends Zend_Cache_Backend_Memcached
         $data = array($data, time(), $lifetime);
 
         $result = $this->_memcache->set($id, $data, $flag, $lifetime);
+
         if (count($tags) > 0) {
         	$this->saveTags($id, $tags);
         }
@@ -187,34 +258,15 @@ final class Fan_Cache_Backend_Memcache extends Zend_Cache_Backend_Memcached
         }
 
         if ($mode == Zend_Cache::CLEANING_MODE_MATCHING_TAG) {
-        	$siteTags = $newTags = $this->getTags();
+            foreach($tags as $tag) {
+                $_tags = (array) $this->getItemsByTag($tag);
 
-        	if (count($siteTags)) {
-	        	foreach ($tags as $tag) {
-	        		if (isset($siteTags[$tag])) {
-	        			foreach ($siteTags[$tag] as $item) {
-	        				$this->_memcache->delete($item, 0);
-	        			}
-	        			unset($newTags[$tag]);
-	        		}
-	        	}
-	        	$this->_memcache->set($this->getTagListId(),$newTags);
-        	}
-        }
+                foreach($_tags as $item) {
+                    $this->_memcache->delete($item, 0);
+                }
 
-        if ($mode == Zend_Cache::CLEANING_MODE_NOT_MATCHING_TAG) {
-        	$siteTags = $newTags = $this->getTags();
-        	if (count($siteTags)) {
-        		foreach ($siteTags as $siteTag => $items) {
-        			if (array_search($siteTag, $tags) === FALSE) {
-        				foreach ($items as $item) {
-        					$this->_memcache->delete($item, 0);
-        				}
-        				unset($newTags[$siteTag]);
-        			}
-        		}
-        		$this->_memcache->set($this->getTagListId(),$newTags);
-        	}
+                $this->saveTags($tag);
+            }
         }
     }
 
