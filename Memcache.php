@@ -83,7 +83,7 @@ final class Fan_Cache_Backend_Memcache extends Zend_Cache_Backend_Memcached
         $result = FALSE;
         $tag_list = $this->getTagPrefix() . $tag;
 
-        if (!empty($items)) {
+        if (empty($items)) {
             $result = $this->_memcache->delete($tag_list, 0);
         } else {
             $result = $this->_memcache->set($tag_list, $items);
