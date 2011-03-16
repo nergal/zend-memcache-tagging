@@ -213,7 +213,7 @@ final class Fan_Cache_Backend_Memcache extends Zend_Cache_Backend_Memcached
 
         $data = array($data, time(), $lifetime);
 
-        $result = $this->_memcache->set($id, $data, $flag, $lifetime);
+        $result = $this->_memcache->set($id, $data, $flag, 0);
 
         if (count($tags) > 0) {
             $this->saveTags($id, $tags);
